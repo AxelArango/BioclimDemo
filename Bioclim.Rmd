@@ -1,0 +1,251 @@
+---
+title: "Bioclim Model"
+author: "Sebastian Forero & Axel Arango"
+date: "2025-01-27"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Bioclim
+
+Bioclim modelling is a classic approach to model species distribution based in environmenal variables and Hutchinson's duality,
+
+Bioclim modelling is commonly used in ENM analysis and habitat idoeneity.
+
+## Bioclim
+
+It focuses on identifying the climatic conditions of a species' habitat
+
+Then they are translated to geographical areas with similar conditions
+
+## Bioclim
+
+This exersice is centered in reconstructing the potential distribution of _Quiscalus palustris_, an extinct bird endemic of Mexico using two environmental variables from Worldclim 2.1.
+
+
+
+
+```{r, message=FALSE, warning=F, include=FALSE}     
+#Verify installed packages
+packages <- c("terra", "tidyverse")
+
+# Install the ones not installed
+for (pkg in packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install.packages(pkg)
+  }
+}
+
+# Cargar los paquetes
+library(terra)
+library(tidyverse)
+
+```
+
+
+## Loading the geographic and climatic information
+
+Here, we need 3 things, occurrence data of the species, environmental layers, and (if known), the extent of our study.
+
+Here, we will focus on Mexico
+
+## Getting the extent
+
+First we load geographic data of the world
+
+```{r}
+poli <- vect("files/Mundo.shp")  
+plot(poli)
+```
+
+## Getting the extent
+
+Then we select our place of interest
+
+```{r}
+Mex <- poli[poli$NOMBRE == "Mexico"]
+plot(Mex)
+
+```
+
+## Using the extent to limit the data
+
+First, we load the data
+
+```{r}
+vars <- rast(list.files(path = "files/", pattern = "\\.tif$", full.names = T)) 
+plot(vars)
+
+
+```
+## Cropping the data
+
+
+```{r}
+vars_mex <- vars %>% 
+  crop(Mex) %>% 
+  mask(Mex) 
+plot(vars_mex) 
+```
+
+## Environmental space
+
+Now we can observe Mexico's environmental space, by extracting the climatic data from the geography
+
+```{r}
+vars_mex_puntos <- terra::as.points(vars_mex)
+
+plot(vars_mex_puntos$wc2.1_2.5m_bio_1, 
+     vars_mex_puntos$wc2.1_2.5m_bio_12, 
+     cex=0.5, 
+     pch=20, 
+     xlab="Mean annual temperature (°C)", 
+     ylab = "Annual precipitation (mm)", 
+     col = "grey",
+     main = "Mexico's environmental space")
+```
+
+##Species data
+
+We load the few occurence points available for _Quiscalus palustris_
+
+```{r}
+palustris <- read.csv("files/palustris1.csv",header=T)
+head(palustris)
+```
+
+## Species data
+
+Then, we make them spatially explicit by transforming them into spatial points with coordinates
+
+```{r}
+occ_palustris <- vect(palustris, geom = c("longitude", "latitude"), crs = "EPSG:4326") # Convertir en un objeto espacial
+```
+
+## Species data
+
+Lets check them out:
+
+```{r}
+
+plot(vars_mex$wc2.1_2.5m_bio_1)
+points(occ_palustris, col="red", cex=0.5)
+```
+
+## Extracting the environmental data
+
+Once we have the spatial points, we can extract the environmental data from the rasters.
+
+```{r}
+palustris_vars <- terra::extract(vars_mex, occ_palustris, xy = T) # Extracción
+print(palustris_vars)
+```
+
+
+## Environmental ranges
+
+With these values extracted from the environmental space, we can calculate the environmental ranges, which is the principle from Bioclim modelling.
+
+```{r}
+min_bio1 <- min(palustris_vars$wc2.1_2.5m_bio_1)
+print(min_bio1)
+max_bio1 <- max(palustris_vars$wc2.1_2.5m_bio_1)
+print(max_bio1)
+min_bio12 <- min(palustris_vars$wc2.1_2.5m_bio_12)
+print(min_bio12)
+max_bio12 <- max(palustris_vars$wc2.1_2.5m_bio_12)
+print(max_bio12)
+```
+
+
+## Bioclim modelling
+
+This approach selects the environmental space of n predictor variables in which species are present.
+
+lets see them:
+
+```{r}
+plot(vars_mex_puntos$wc2.1_2.5m_bio_1, 
+     vars_mex_puntos$wc2.1_2.5m_bio_12, 
+     cex=0.5, 
+     pch=20, 
+     xlab="Mean annual temperature (°C)", 
+     ylab = "Annual precipitation (mm)", 
+     col = "grey",
+     main = "Mexico's environmental space")
+title(sub = "Q. palustris Ocurrences", col.sub = "red", cex = 0.6)
+points(palustris_vars[,2:3], pch = 20, col = "red", cex = 1)
+```
+
+
+## Bioclim modelling
+
+Now we delimit the environmental range of _Q. palustris_ according to its occurrences.
+
+
+```{r}
+plot(vars_mex_puntos$wc2.1_2.5m_bio_1, 
+     vars_mex_puntos$wc2.1_2.5m_bio_12, 
+     cex=0.5, 
+     pch=20, 
+     xlab="Mean annual temperature (°C)", 
+     ylab = "Annual precipitation (mm)", 
+     col = "grey",
+     main = "Mexico's environmental space")
+title(sub = "Q. palustris Ocurrences", col.sub = "red", cex = 0.6)
+points(palustris_vars[,2:3], pch = 20, col = "red", cex = 1)
+abline(v = c(min_bio1, max_bio1))
+abline(h = c(min_bio12, max_bio12))
+```
+Everything within this space, has the possibility to be adequate for _Q. palustris_ presence.
+
+## Bioclim modeling
+
+Lets select the points within this range
+
+```{r}
+bioclim <- vars_mex_puntos[
+  vars_mex_puntos$wc2.1_2.5m_bio_1 >= min_bio1 &
+  vars_mex_puntos$wc2.1_2.5m_bio_1 <= max_bio1 &
+  vars_mex_puntos$wc2.1_2.5m_bio_12 >= min_bio12 &
+  vars_mex_puntos$wc2.1_2.5m_bio_12 <= max_bio12
+]
+
+bioclim_df <- as.data.frame(bioclim)
+head(bioclim_df)
+```
+## Bioclim modelling
+
+let's see them:
+
+```{r}
+plot(vars_mex_puntos$wc2.1_2.5m_bio_1, 
+     vars_mex_puntos$wc2.1_2.5m_bio_12, 
+     cex=0.5, 
+     pch=20, 
+     xlab="Mean annual temperature (°C)", 
+     ylab = "Annual precipitation (mm)", 
+     col = "grey",
+     main = "Mexico's environmental space")
+title(sub = "Q. palustris Ocurrences", col.sub = "red", cex = 0.6)
+abline(v = c(min_bio1, max_bio1))
+abline(h = c(min_bio12, max_bio12))
+points(bioclim_df[,1:2], pch = 20, col = "red", cex = 0.5)
+```
+
+## Bioclim modelling
+
+Once this space is define and selected, we can translate this values on to the geography:
+
+```{r}
+plot(vars_mex$wc2.1_2.5m_bio_1) 
+points(bioclim, cex = 0.3, col = "red")
+```
+
+this are the pixels that are within the environmental range of _Q. palustris_, and therfore, according to this model, might be its potential distribution.
+
+
