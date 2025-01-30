@@ -1,6 +1,6 @@
 ---
 title: "Bioclim Model"
-author: "Sebastian Forero & Axel Arango"
+author: "Sebastian Forero & modified by Axel Arango"
 date: "2025-01-27"
 output: html_document
 ---
